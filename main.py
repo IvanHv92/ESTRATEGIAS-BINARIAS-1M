@@ -1,14 +1,15 @@
-
 import requests, pandas as pd, ta, time, csv
 from datetime import datetime
 from flask import Flask
 from threading import Thread
 
+# CONFIGURACIÓN
 API_KEY = "8e0049007fcf4a21aa59a904ea8af292"
 INTERVAL = "5min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
+# Pares a analizar
 PARES = [
     "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
     "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
@@ -64,8 +65,7 @@ def analizar(symbol):
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:
-" + "\n".join(estrategias)
+        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
@@ -80,6 +80,7 @@ def iniciar():
         print("⏳ Esperando 2 minutos...\n")
         time.sleep(120)
 
+# Servidor web para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
