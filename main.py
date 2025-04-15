@@ -86,8 +86,8 @@ def analizar(symbol):
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:
-" + "
+       mensaje = f"📊 Señal {tipo} en {symbol}:
+" + "\n".join(estrategias)
 ".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
