@@ -3,11 +3,13 @@ from datetime import datetime
 from flask import Flask
 from threading import Thread
 
+# CONFIGURACIÓN
 API_KEY = "8e0049007fcf4a21aa59a904ea8af292"
 INTERVAL = "5min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
+# PARES
 PARES = [
     "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
     "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
@@ -21,58 +23,45 @@ def enviar_telegram(mensaje):
     requests.post(url, data=data)
 
 def guardar_csv(fecha, par, tipo, estrategias, precio):
-    with open("senales_mejoradas.csv", "a", newline="") as f:
+    with open("registro_senales.csv", "a", newline="") as f:
         csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5)])
 
 def obtener_datos(symbol):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={INTERVAL}&outputsize=100&apikey={API_KEY}"
     r = requests.get(url).json()
-    if "values" not in r: return None
+    if "values" not in r:
+        print(f"❌ Error con {symbol}")
+        return None
     df = pd.DataFrame(r["values"])
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime")
     df["close"] = df["close"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
     return df
 
 def analizar(symbol):
     df = obtener_datos(symbol)
-    if df is None: return
+    if df is None:
+        return
 
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
-    df["adx"] = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], 14).adx()
-
-    macd = ta.trend.MACD(df["close"])
-    df["macd"] = macd.macd()
-    df["macd_signal"] = macd.macd_signal()
-    df["macd_diff"] = macd.macd_diff()
 
     u = df.iloc[-1]
     a = df.iloc[-2]
     estrategias = []
 
+    # Cruce EMA simple
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
+    # Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
-
-    if u["rsi"] < 30 and a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["macd_diff"] > a["macd_diff"]:
-        estrategias.append("RSI + MACD CALL")
-    if u["rsi"] > 70 and a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["macd_diff"] < a["macd_diff"]:
-        estrategias.append("RSI + MACD PUT")
-
-    if u["adx"] > 25 and a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
-        estrategias.append("ADX + EMA CALL")
-    if u["adx"] > 25 and a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
-        estrategias.append("ADX + EMA PUT")
 
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
@@ -90,13 +79,15 @@ def iniciar():
         for par in PARES:
             analizar(par)
         print("⏳ Esperando 2 minutos...\n")
-        time.sleep(120)
+        time.sleep(120)  # cada 2 minutos
 
+# FLASK PARA MANTENER EL BOT VIVO
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: EMA, EMA+RSI, RSI+MACD, ADX+EMA (cada 2 min)"
+    return "✅ Bot activo con estrategias: Cruce EMA y Cruce EMA + RSI (cada 2 min)"
 
+# INICIAR FLASK Y BOT EN PARALELO
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
