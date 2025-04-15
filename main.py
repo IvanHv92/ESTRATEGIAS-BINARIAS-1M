@@ -9,26 +9,22 @@ INTERVAL = "1min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
-# Pares de divisas a analizar
+# Lista de pares (excluye EUR/JPY por bajo rendimiento)
 PARES = [
-    "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
-    "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
-    "USD/CHF", "USD/JPY", "USD/INR", "USD/CAD",
-    "GBP/JPY", "USD/BDT", "USD/EGP", "USD/MXN"
+    "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP",
+    "AUD/USD", "AUD/CHF", "AUD/CAD",
+    "USD/CHF", "USD/JPY", "USD/CAD", "USD/INR", "USD/BDT", "USD/MXN", "GBP/JPY"
 ]
 
-# Función para enviar señal por Telegram
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}
     requests.post(url, data=data)
 
-# Guardar señales en CSV
 def guardar_csv(fecha, par, tipo, estrategias, precio):
-    with open("senales_filtradas.csv", "a", newline="") as f:
+    with open("senales_optimizadas.csv", "a", newline="") as f:
         csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5)])
 
-# Obtener datos desde TwelveData
 def obtener_datos(symbol):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={INTERVAL}&outputsize=100&apikey={API_KEY}"
     r = requests.get(url).json()
@@ -39,9 +35,19 @@ def obtener_datos(symbol):
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime")
     df["close"] = df["close"].astype(float)
+    df["open"] = df["open"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
     return df
 
-# Lógica de análisis por par
+def vela_fuerte(row):
+    cuerpo = abs(row["close"] - row["open"])
+    mecha_total = row["high"] - row["low"]
+    if mecha_total == 0:
+        return False
+    proporcion = cuerpo / mecha_total
+    return proporcion >= 0.5
+
 def analizar(symbol):
     df = obtener_datos(symbol)
     if df is None:
@@ -57,44 +63,47 @@ def analizar(symbol):
 
     ema20_pendiente = u["ema20"] - a["ema20"]
 
-    # Estrategia 1: Cruce EMA puro con pendiente
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and ema20_pendiente > 0:
+    if not vela_fuerte(u):
+        print(f"[{symbol}] ❌ Vela débil, sin señal")
+        return
+    if u["rsi"] > 70 or u["rsi"] < 30:
+        print(f"[{symbol}] ❌ RSI extremo, sin señal")
+        return
+
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and ema20_pendiente > 0.0003:
         estrategias.append("Cruce EMA CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and ema20_pendiente < 0:
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and ema20_pendiente < -0.0003:
         estrategias.append("Cruce EMA PUT")
 
-    # Estrategia 2: Cruce EMA + RSI más estricta
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 55 and ema20_pendiente > 0:
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 55 and ema20_pendiente > 0.0003:
         estrategias.append("Cruce EMA + RSI CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 45 and ema20_pendiente < 0:
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 45 and ema20_pendiente < -0.0003:
         estrategias.append("Cruce EMA + RSI PUT")
 
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
+        mensaje = f"📊 Señal {tipo} en {symbol}:
+" + "\n".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
     else:
         print(f"[{symbol}] ❌ Sin señal clara")
 
-# Ciclo principal del bot
 def iniciar():
     while True:
-        print("\n🔁 Analizando pares con estrategia estricta EMA y EMA+RSI...\n")
+        print("\n🔁 Analizando pares con mejoras aplicadas...\n")
         for par in PARES:
             analizar(par)
         print("⏳ Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Servidor web para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot optimizado activo con estrategias estrictas (EMA + EMA/RSI filtradas)"
+    return "✅ Bot activo con filtros de pendiente, vela fuerte y RSI"
 
-# Ejecutar servidor y bot
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
