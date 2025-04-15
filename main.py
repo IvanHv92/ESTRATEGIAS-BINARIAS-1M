@@ -9,7 +9,6 @@ INTERVAL = "5min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
-# PARES
 PARES = [
     "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
     "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
@@ -23,7 +22,7 @@ def enviar_telegram(mensaje):
     requests.post(url, data=data)
 
 def guardar_csv(fecha, par, tipo, estrategias, precio):
-    with open("registro_senales.csv", "a", newline="") as f:
+    with open("senales_filtradas.csv", "a", newline="") as f:
         csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5)])
 
 def obtener_datos(symbol):
@@ -47,21 +46,24 @@ def analizar(symbol):
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
 
+    adx = ta.trend.ADXIndicator(df["high"].astype(float), df["low"].astype(float), df["close"], 14)
+    df["adx"] = adx.adx()
+    df["+di"] = adx.adx_pos()
+    df["-di"] = adx.adx_neg()
+
     u = df.iloc[-1]
     a = df.iloc[-2]
     estrategias = []
 
-    # Cruce EMA simple
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 55:
         estrategias.append("Cruce EMA CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 45:
         estrategias.append("Cruce EMA PUT")
 
-    # Cruce EMA + RSI
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
-        estrategias.append("Cruce EMA + RSI CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
-        estrategias.append("Cruce EMA + RSI PUT")
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 55 and u["adx"] > 25 and u["+di"] > u["-di"]:
+        estrategias.append("Cruce EMA + RSI + ADX CALL")
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 45 and u["adx"] > 25 and u["-di"] > u["+di"]:
+        estrategias.append("Cruce EMA + RSI + ADX PUT")
 
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
@@ -75,19 +77,16 @@ def analizar(symbol):
 
 def iniciar():
     while True:
-        print("\n🔁 Analizando todos los pares...\n")
+        print("\n🔁 Analizando pares con filtros estrictos...\n")
         for par in PARES:
             analizar(par)
         print("⏳ Esperando 2 minutos...\n")
-        time.sleep(120)  # cada 2 minutos
+        time.sleep(120)
 
-# FLASK PARA MANTENER EL BOT VIVO
 app = Flask('')
-
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: Cruce EMA y Cruce EMA + RSI (cada 2 min)"
+    return "✅ Bot activo con estrategias: Cruce EMA, EMA+RSI+ADX (cada 2 min)"
 
-# INICIAR FLASK Y BOT EN PARALELO
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
