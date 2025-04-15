@@ -1,15 +1,14 @@
+
 import requests, pandas as pd, ta, time, csv
 from datetime import datetime
 from flask import Flask
 from threading import Thread
 
-# CONFIGURACIÓN
 API_KEY = "8e0049007fcf4a21aa59a904ea8af292"
 INTERVAL = "1min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
-# Pares a analizar
 PARES = [
     "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
     "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
@@ -22,7 +21,7 @@ def enviar_telegram(mensaje):
     requests.post(url, data=data)
 
 def guardar_csv(fecha, par, tipo, estrategias, precio):
-    with open("senales_ema.csv", "a", newline="") as f:
+    with open("senales_filtradas.csv", "a", newline="") as f:
         csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5)])
 
 def obtener_datos(symbol):
@@ -50,22 +49,24 @@ def analizar(symbol):
     a = df.iloc[-2]
     estrategias = []
 
-    # Cruce EMA puro
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
+    ema20_pendiente = u["ema20"] - a["ema20"]
+
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and ema20_pendiente > 0:
         estrategias.append("Cruce EMA CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and ema20_pendiente < 0:
         estrategias.append("Cruce EMA PUT")
 
-    # Cruce EMA + RSI
-    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
+    if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 55 and ema20_pendiente > 0:
         estrategias.append("Cruce EMA + RSI CALL")
-    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
+    if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 45 and ema20_pendiente < 0:
         estrategias.append("Cruce EMA + RSI PUT")
 
     if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
+        mensaje = f"📊 Señal {tipo} en {symbol}:
+" + "
+".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
@@ -74,18 +75,17 @@ def analizar(symbol):
 
 def iniciar():
     while True:
-        print("\n🔁 Analizando pares con EMA y EMA+RSI...\n")
+        print("\n🔁 Analizando pares con estrategia estricta EMA y EMA+RSI...\n")
         for par in PARES:
             analizar(par)
         print("⏳ Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Servidor web para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: Cruce EMA y Cruce EMA + RSI (cada 2 minutos)"
+    return "✅ Bot optimizado activo con estrategias estrictas (EMA + EMA/RSI filtradas)"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
