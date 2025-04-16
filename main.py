@@ -36,8 +36,6 @@ def obtener_datos(symbol):
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime")
     df["close"] = df["close"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
     return df
 
 def analizar(symbol):
@@ -49,10 +47,10 @@ def analizar(symbol):
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
 
-    adx = ta.trend.ADXIndicator(high=df["high"], low=df["low"], close=df["close"])
-    df["adx"] = adx.adx()
-    df["+di"] = adx.adx_pos()
-    df["-di"] = adx.adx_neg()
+    adx_calc = ta.trend.ADXIndicator(df["close"], df["high"], df["low"], window=14)
+    df["adx"] = adx_calc.adx()
+    df["+di"] = adx_calc.adx_pos()
+    df["-di"] = adx_calc.adx_neg()
 
     macd = ta.trend.MACD(df["close"])
     df["macd"] = macd.macd()
@@ -87,30 +85,10 @@ def analizar(symbol):
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    if len(estrategias) >= 2:  # Solo enviar señales si hay 2 o más estrategias
+    if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol} ({fecha}):\n" + "\n".join(estrategias)
+        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
-    else:
-        print(f"[{symbol}] ❌ Sin señal clara ({datetime.now().strftime('%H:%M:%S')})")
-
-def iniciar():
-    while True:
-        print(f"\n⏳ [{datetime.now().strftime('%H:%M:%S')}] Iniciando análisis de pares...")
-        for par in PARES:
-            analizar(par)
-        print("🕒 Esperando 2 minutos...\n")
-        time.sleep(120)
-
-# Flask para mantener activo en Render
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "✅ Bot activo (EMA, EMA+RSI, RSI+MACD, ADX+EMA) con velas de 5min, análisis cada 2min"
-
-Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
-iniciar()
