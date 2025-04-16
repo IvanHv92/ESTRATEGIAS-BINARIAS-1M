@@ -87,19 +87,19 @@ def analizar(symbol):
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    if estrategias:
+    if len(estrategias) >= 2:  # Solo enviar señales si hay 2 o más estrategias
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
+        mensaje = f"📊 Señal {tipo} en {symbol} ({fecha}):\n" + "\n".join(estrategias)
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
     else:
-        print(f"[{symbol}] ❌ Sin señal clara")
+        print(f"[{symbol}] ❌ Sin señal clara ({datetime.now().strftime('%H:%M:%S')})")
 
 def iniciar():
     while True:
-        print("⏳ Analizando todos los pares...")
+        print(f"\n⏳ [{datetime.now().strftime('%H:%M:%S')}] Iniciando análisis de pares...")
         for par in PARES:
             analizar(par)
         print("🕒 Esperando 2 minutos...\n")
@@ -110,7 +110,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: EMA, EMA+RSI, RSI+MACD, ADX+EMA (cada 2 min)"
+    return "✅ Bot activo (EMA, EMA+RSI, RSI+MACD, ADX+EMA) con velas de 5min, análisis cada 2min"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
