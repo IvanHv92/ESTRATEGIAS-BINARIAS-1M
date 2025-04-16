@@ -46,22 +46,32 @@ def analizar(symbol):
     if df is None:
         return
 
+    # Calcular Bollinger Bands con manejo de errores
+    try:
+        bb = ta.volatility.BollingerBands(df["close"], 20, 2)
+        df["bb_upper"] = bb.bollinger_hband()
+        df["bb_lower"] = bb.bollinger_lband()
+    except Exception as e:
+        print(f"⚠️ Error calculando Bollinger en {symbol}: {e}")
+        return
+
+    if "bb_upper" not in df.columns or "bb_lower" not in df.columns:
+        print(f"⚠️ No se generaron columnas de BB en {symbol}")
+        return
+
     u = df.iloc[-1]
     a = df.iloc[-2]
 
-    # 🔍 Filtro de consolidación
-    bb = ta.volatility.BollingerBands(df["close"], 20, 2)
-    df["bb_upper"] = bb.bollinger_hband()
-    df["bb_lower"] = bb.bollinger_lband()
+    # Filtro de consolidación
     rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
-    variacion = (df["high"].max() - df["low"].min()) / df["close"].iloc[-1]
-
+    variacion = (df["high"].max() - df["low"].min()) / u["close"]
     if rango_bb < 0.01 or variacion < 0.01:
         mensaje = f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)"
         print(mensaje)
         enviar_telegram(mensaje)
         return
 
+    # Anti-martingala
     ahora = datetime.now()
     if symbol in ULTIMAS_SENIALES:
         delta = (ahora - ULTIMAS_SENIALES[symbol]).total_seconds()
@@ -69,6 +79,7 @@ def analizar(symbol):
             print(f"⛔ Señal ignorada por anti-martingala en {symbol}")
             return
 
+    # Indicadores técnicos
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
@@ -86,31 +97,32 @@ def analizar(symbol):
     a = df.iloc[-2]
     estrategias = []
 
-    # 1. Cruce EMA
+    # Estrategia 1: Cruce EMA
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
-    # 2. Cruce EMA + RSI
+    # Estrategia 2: Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
 
-    # 3. RSI + MACD
+    # Estrategia 3: RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
         estrategias.append("RSI + MACD CALL")
     if a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["rsi"] < 50:
         estrategias.append("RSI + MACD PUT")
 
-    # 4. ADX + EMA
+    # Estrategia 4: ADX + EMA
     if u["adx"] > 20:
         if u["+di"] > u["-di"] and u["ema9"] > u["ema20"]:
             estrategias.append("ADX + EMA CALL")
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
+    # Evaluar señal
     if len(estrategias) >= 2:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fuerza = len(estrategias)
@@ -144,7 +156,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con consolidación, mínimo 2 estrategias, puntaje de confianza y expiración sugerida"
+    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RSI, ADX+EMA y filtros avanzados"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
