@@ -46,7 +46,7 @@ def analizar(symbol):
     if df is None:
         return
 
-    # Calcular Bollinger Bands con manejo de errores
+    # Calcular Bollinger Bands
     try:
         bb = ta.volatility.BollingerBands(df["close"], 20, 2)
         df["bb_upper"] = bb.bollinger_hband()
@@ -63,11 +63,11 @@ def analizar(symbol):
     a = df.iloc[-2]
 
     # Filtro de consolidación
-rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
-variacion = (df["high"].max() - df["low"].min()) / u["close"]
-if rango_bb < 0.01 or variacion < 0.01:
-    print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
-    return
+    rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
+    variacion = (df["high"].max() - df["low"].min()) / u["close"]
+    if rango_bb < 0.01 or variacion < 0.01:
+        print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
+        return
 
     # Anti-martingala
     ahora = datetime.now()
@@ -91,36 +91,34 @@ if rango_bb < 0.01 or variacion < 0.01:
     df["macd"] = macd.macd()
     df["macd_signal"] = macd.macd_signal()
 
-    u = df.iloc[-1]
-    a = df.iloc[-2]
     estrategias = []
 
-    # Estrategia 1: Cruce EMA
+    # 1. Cruce EMA
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
-    # Estrategia 2: Cruce EMA + RSI
+    # 2. Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
 
-    # Estrategia 3: RSI + MACD
+    # 3. RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
         estrategias.append("RSI + MACD CALL")
     if a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["rsi"] < 50:
         estrategias.append("RSI + MACD PUT")
 
-    # Estrategia 4: ADX + EMA
+    # 4. ADX + EMA
     if u["adx"] > 20:
         if u["+di"] > u["-di"] and u["ema9"] > u["ema20"]:
             estrategias.append("ADX + EMA CALL")
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    # Evaluar señal
+    # Validación
     if len(estrategias) >= 2:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fuerza = len(estrategias)
