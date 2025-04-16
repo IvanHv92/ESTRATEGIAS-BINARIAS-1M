@@ -1,4 +1,3 @@
-
 import requests, pandas as pd, ta, time, csv
 from datetime import datetime
 from flask import Flask
@@ -47,60 +46,79 @@ def analizar(symbol):
     if df is None:
         return
 
+    # Bollinger Bands para filtro de consolidación
     try:
         bb = ta.volatility.BollingerBands(df["close"], 20, 2)
         df["bb_upper"] = bb.bollinger_hband()
         df["bb_lower"] = bb.bollinger_lband()
-    except:
+    except Exception as e:
+        print(f"⚠️ Error calculando Bollinger en {symbol}: {e}")
         return
 
     if "bb_upper" not in df.columns or "bb_lower" not in df.columns:
+        print(f"⚠️ No se generaron columnas de BB en {symbol}")
         return
 
     u = df.iloc[-1]
     a = df.iloc[-2]
 
+    # Filtro de consolidación
     rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
     variacion = (df["high"].max() - df["low"].min()) / u["close"]
     if rango_bb < 0.01 or variacion < 0.01:
+        print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
         return
 
+    # Anti-martingala
     ahora = datetime.now()
     if symbol in ULTIMAS_SENIALES:
         delta = (ahora - ULTIMAS_SENIALES[symbol]).total_seconds()
         if delta < 300:
+            print(f"⛔ Señal ignorada por anti-martingala en {symbol}")
             return
 
+    # Indicadores técnicos
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
+
     adx = ta.trend.ADXIndicator(high=df["high"], low=df["low"], close=df["close"])
     df["adx"] = adx.adx()
     df["+di"] = adx.adx_pos()
     df["-di"] = adx.adx_neg()
+
     macd = ta.trend.MACD(df["close"])
     df["macd"] = macd.macd()
     df["macd_signal"] = macd.macd_signal()
 
     estrategias = []
+
+    # 1. Cruce EMA
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
+
+    # 2. Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
+
+    # 3. RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
         estrategias.append("RSI + MACD CALL")
     if a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["rsi"] < 50:
         estrategias.append("RSI + MACD PUT")
+
+    # 4. ADX + EMA
     if u["adx"] > 20:
         if u["+di"] > u["-di"] and u["ema9"] > u["ema20"]:
             estrategias.append("ADX + EMA CALL")
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
+    # Validación y envio
     if len(estrategias) >= 2:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fuerza = len(estrategias)
@@ -111,12 +129,9 @@ def analizar(symbol):
             f"📊 Señal {tipo} en {symbol}:
 "
             f"{fecha}
-" +
-            "
-".join(estrategias) +
-            f"
-⏱️ Expiración sugerida: {expiracion}
 "
+            + "\n".join(estrategias) +
+            f"\n⏱️ Expiración sugerida: {expiracion}\n"
             f"📈 Confianza: {estrellas}"
         )
         enviar_telegram(mensaje)
@@ -128,19 +143,15 @@ def analizar(symbol):
 
 def iniciar():
     while True:
-        print("⏳ Analizando todos los pares...")
+        print("\n🔁 Analizando todos los pares...\n")
         for par in PARES:
             analizar(par)
-        print("🕒 Esperando 2 minutos...
-")
+        print("\n⏳ Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Flask para mantener activo en Render
+# Flask para mantener vivo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RSI, ADX+EMA y filtros avanzados"
-
-Thread(target=iniciar).start()
-Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
+    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RS
