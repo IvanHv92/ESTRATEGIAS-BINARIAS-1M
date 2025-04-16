@@ -46,17 +46,17 @@ def analizar(symbol):
     if df is None:
         return
 
-    # Calcular Bollinger Bands
+    # Bollinger Bands
     try:
         bb = ta.volatility.BollingerBands(df["close"], 20, 2)
         df["bb_upper"] = bb.bollinger_hband()
         df["bb_lower"] = bb.bollinger_lband()
     except Exception as e:
-        print(f"⚠️ Error calculando Bollinger en {symbol}: {e}")
+        print(f"⚠️ Error calculando BB en {symbol}: {e}")
         return
 
     if "bb_upper" not in df.columns or "bb_lower" not in df.columns:
-        print(f"⚠️ No se generaron columnas de BB en {symbol}")
+        print(f"⚠️ No se generaron bandas de Bollinger en {symbol}")
         return
 
     u = df.iloc[-1]
@@ -66,7 +66,7 @@ def analizar(symbol):
     rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
     variacion = (df["high"].max() - df["low"].min()) / u["close"]
     if rango_bb < 0.01 or variacion < 0.01:
-        print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
+        print(f"⚠️ Señal ignorada en {symbol} por consolidación")
         return
 
     # Anti-martingala
@@ -74,10 +74,10 @@ def analizar(symbol):
     if symbol in ULTIMAS_SENIALES:
         delta = (ahora - ULTIMAS_SENIALES[symbol]).total_seconds()
         if delta < 300:
-            print(f"⛔ Señal ignorada por anti-martingala en {symbol}")
+            print(f"⛔ Señal ignorada en {symbol} por anti-martingala")
             return
 
-    # Indicadores técnicos
+    # Indicadores
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
@@ -99,11 +99,11 @@ def analizar(symbol):
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
-    # 2. Cruce EMA + RSI
+    # 2. EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
-        estrategias.append("Cruce EMA + RSI CALL")
+        estrategias.append("EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
-        estrategias.append("Cruce EMA + RSI PUT")
+        estrategias.append("EMA + RSI PUT")
 
     # 3. RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
@@ -126,10 +126,8 @@ def analizar(symbol):
         fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
         estrellas = "⭐" * fuerza
         mensaje = (
-            f"📊 Señal {tipo} en {symbol}:
-"
-            f"{fecha}
-"
+            f"📊 Señal {tipo} en {symbol}:\n"
+            f"{fecha}\n"
             + "\n".join(estrategias) +
             f"\n⏱️ Expiración sugerida: {expiracion}\n"
             f"📈 Confianza: {estrellas}"
