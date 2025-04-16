@@ -36,6 +36,8 @@ def obtener_datos(symbol):
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime")
     df["close"] = df["close"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
     return df
 
 def analizar(symbol):
@@ -46,9 +48,11 @@ def analizar(symbol):
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
-    df["adx"] = ta.trend.ADXIndicator(df["close"]).adx()
-    df["+di"] = ta.trend.ADXIndicator(df["close"]).adx_pos()
-    df["-di"] = ta.trend.ADXIndicator(df["close"]).adx_neg()
+
+    adx = ta.trend.ADXIndicator(high=df["high"], low=df["low"], close=df["close"])
+    df["adx"] = adx.adx()
+    df["+di"] = adx.adx_pos()
+    df["-di"] = adx.adx_neg()
 
     macd = ta.trend.MACD(df["close"])
     df["macd"] = macd.macd()
@@ -101,7 +105,7 @@ def iniciar():
         print("🕒 Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Flask para mantener activo
+# Flask para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
