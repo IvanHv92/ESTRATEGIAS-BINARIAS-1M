@@ -49,9 +49,15 @@ def analizar(symbol):
     u = df.iloc[-1]
     a = df.iloc[-2]
 
-    rango = abs(u["high"] - u["low"]) / u["close"]
-    if rango > 0.02:
-        mensaje = f"⚠️ Señal ignorada en {symbol} por volatilidad inestable (rango > 2%)"
+    # 🔍 Filtro de consolidación: Bollinger estrechas y baja variación
+    bb = ta.volatility.BollingerBands(df["close"], 20, 2)
+    df["bb_upper"] = bb.bollinger_hband()
+    df["bb_lower"] = bb.bollinger_lband()
+    rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
+    variacion = (df["high"].max() - df["low"].min()) / df["close"].iloc[-1]
+
+    if rango_bb < 0.01 or variacion < 0.01:
+        mensaje = f"⚠️ Señal ignorada en {symbol} por consolidación detectada (rango o variación < 1%)"
         print(mensaje)
         enviar_telegram(mensaje)
         return
@@ -106,7 +112,9 @@ def analizar(symbol):
         fuerza = len(estrategias)
         expiracion = "5 min" if fuerza >= 3 else "3 min"
         fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
-        mensaje = f"📊 Señal {tipo} en {symbol}:\n{fecha}\n" + "\n".join(estrategias) + f"\n⏱️ Expiración sugerida: {expiracion}"
+        estrellas = "⭐" * fuerza
+        mensaje = f"📊 Señal {tipo} en {symbol}:
+{fecha}\n" + "\n".join(estrategias) + f"\n⏱️ Expiración sugerida: {expiracion}\n📈 Confianza: {estrellas}"
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"], expiracion)
         ULTIMAS_SENIALES[symbol] = ahora
@@ -126,7 +134,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con señales estrictas, filtros de volatilidad y reporte por Telegram"
+    return "✅ Bot activo con filtros de consolidación, puntaje de confianza y mínimo 2 estrategias"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
