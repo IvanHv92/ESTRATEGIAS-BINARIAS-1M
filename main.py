@@ -46,7 +46,7 @@ def analizar(symbol):
     if df is None:
         return
 
-    # Bollinger Bands para filtro de consolidación
+    # Calcular Bollinger Bands
     try:
         bb = ta.volatility.BollingerBands(df["close"], 20, 2)
         df["bb_upper"] = bb.bollinger_hband()
@@ -118,7 +118,6 @@ def analizar(symbol):
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    # Validación y envio
     if len(estrategias) >= 2:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
         fuerza = len(estrategias)
@@ -126,10 +125,8 @@ def analizar(symbol):
         fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
         estrellas = "⭐" * fuerza
         mensaje = (
-            f"📊 Señal {tipo} en {symbol}:
-"
-            f"{fecha}
-"
+            f"📊 Señal {tipo} en {symbol}:\n"
+            f"{fecha}\n"
             + "\n".join(estrategias) +
             f"\n⏱️ Expiración sugerida: {expiracion}\n"
             f"📈 Confianza: {estrellas}"
@@ -143,15 +140,18 @@ def analizar(symbol):
 
 def iniciar():
     while True:
-        print("\n🔁 Analizando todos los pares...\n")
+        print("⏳ Analizando todos los pares...")
         for par in PARES:
             analizar(par)
-        print("\n⏳ Esperando 2 minutos...\n")
+        print("🕒 Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Flask para mantener vivo en Render
+# Flask para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RS
+    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RSI, ADX+EMA y filtros avanzados"
+
+Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
+iniciar()
