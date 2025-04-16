@@ -97,7 +97,7 @@ def analizar(symbol):
             f"📈 Confianza: {estrellas}"
         )
         enviar_telegram(mensaje)
-        guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
+        guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"], expiracion)
         print(mensaje)
     else:
         print(f"[{symbol}] ❌ Señal débil (menos de 2 estrategias)")
