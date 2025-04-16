@@ -9,6 +9,7 @@ INTERVAL = "5min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
 TELEGRAM_CHAT_ID = "5989911212"
 
+# Pares a analizar
 PARES = [
     "EUR/USD", "EUR/CAD", "EUR/CHF", "EUR/GBP", "EUR/JPY",
     "AUD/CAD", "AUD/CHF", "AUD/USD", "AUD/JPY",
@@ -16,16 +17,14 @@ PARES = [
     "GBP/JPY", "USD/BDT", "USD/EGP", "USD/MXN"
 ]
 
-ULTIMAS_SENIALES = {}
-
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}
     requests.post(url, data=data)
 
-def guardar_csv(fecha, par, tipo, estrategias, precio, expiracion):
+def guardar_csv(fecha, par, tipo, estrategias, precio):
     with open("senales_final.csv", "a", newline="") as f:
-        csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5), expiracion])
+        csv.writer(f).writerow([fecha, par, tipo, estrategias, round(precio, 5)])
 
 def obtener_datos(symbol):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={INTERVAL}&outputsize=100&apikey={API_KEY}"
@@ -46,38 +45,6 @@ def analizar(symbol):
     if df is None:
         return
 
-    # Calcular Bollinger Bands
-    try:
-        bb = ta.volatility.BollingerBands(df["close"], 20, 2)
-        df["bb_upper"] = bb.bollinger_hband()
-        df["bb_lower"] = bb.bollinger_lband()
-    except Exception as e:
-        print(f"⚠️ Error calculando Bollinger en {symbol}: {e}")
-        return
-
-    if "bb_upper" not in df.columns or "bb_lower" not in df.columns:
-        print(f"⚠️ No se generaron columnas de BB en {symbol}")
-        return
-
-    u = df.iloc[-1]
-    a = df.iloc[-2]
-
-    # Filtro de consolidación
-    rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
-    variacion = (df["high"].max() - df["low"].min()) / u["close"]
-    if rango_bb < 0.01 or variacion < 0.01:
-        print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
-        return
-
-    # Anti-martingala
-    ahora = datetime.now()
-    if symbol in ULTIMAS_SENIALES:
-        delta = (ahora - ULTIMAS_SENIALES[symbol]).total_seconds()
-        if delta < 300:
-            print(f"⛔ Señal ignorada por anti-martingala en {symbol}")
-            return
-
-    # Indicadores técnicos
     df["rsi"] = ta.momentum.RSIIndicator(df["close"], 14).rsi()
     df["ema9"] = ta.trend.EMAIndicator(df["close"], 9).ema_indicator()
     df["ema20"] = ta.trend.EMAIndicator(df["close"], 20).ema_indicator()
@@ -91,6 +58,8 @@ def analizar(symbol):
     df["macd"] = macd.macd()
     df["macd_signal"] = macd.macd_signal()
 
+    u = df.iloc[-1]
+    a = df.iloc[-2]
     estrategias = []
 
     # 1. Cruce EMA
@@ -118,25 +87,15 @@ def analizar(symbol):
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    if len(estrategias) >= 2:
+    if estrategias:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
-        fuerza = len(estrategias)
-        expiracion = "5 min" if fuerza >= 3 else "3 min"
-        fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
-        estrellas = "⭐" * fuerza
-        mensaje = (
-            f"📊 Señal {tipo} en {symbol}:\n"
-            f"{fecha}\n"
-            + "\n".join(estrategias) +
-            f"\n⏱️ Expiración sugerida: {expiracion}\n"
-            f"📈 Confianza: {estrellas}"
-        )
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias)
         enviar_telegram(mensaje)
-        guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"], expiracion)
-        ULTIMAS_SENIALES[symbol] = ahora
+        guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"])
         print(mensaje)
     else:
-        print(f"[{symbol}] ❌ Señal débil (menos de 2 estrategias)")
+        print(f"[{symbol}] ❌ Sin señal clara")
 
 def iniciar():
     while True:
@@ -151,7 +110,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RSI, ADX+EMA y filtros avanzados"
+    return "✅ Bot activo con estrategias: EMA, EMA+RSI, RSI+MACD, ADX+EMA (cada 2 min)"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
