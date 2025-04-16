@@ -63,13 +63,11 @@ def analizar(symbol):
     a = df.iloc[-2]
 
     # Filtro de consolidación
-    rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
-    variacion = (df["high"].max() - df["low"].min()) / u["close"]
-    if rango_bb < 0.01 or variacion < 0.01:
-        mensaje = f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)"
-        print(mensaje)
-        enviar_telegram(mensaje)
-        return
+rango_bb = (u["bb_upper"] - u["bb_lower"]) / u["close"]
+variacion = (df["high"].max() - df["low"].min()) / u["close"]
+if rango_bb < 0.01 or variacion < 0.01:
+    print(f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)")
+    return
 
     # Anti-martingala
     ahora = datetime.now()
