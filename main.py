@@ -49,7 +49,7 @@ def analizar(symbol):
     u = df.iloc[-1]
     a = df.iloc[-2]
 
-    # 🔍 Filtro de consolidación: Bollinger estrechas y baja variación
+    # 🔍 Filtro de consolidación
     bb = ta.volatility.BollingerBands(df["close"], 20, 2)
     df["bb_upper"] = bb.bollinger_hband()
     df["bb_lower"] = bb.bollinger_lband()
@@ -57,7 +57,7 @@ def analizar(symbol):
     variacion = (df["high"].max() - df["low"].min()) / df["close"].iloc[-1]
 
     if rango_bb < 0.01 or variacion < 0.01:
-        mensaje = f"⚠️ Señal ignorada en {symbol} por consolidación detectada (rango o variación < 1%)"
+        mensaje = f"⚠️ Señal ignorada en {symbol} por consolidación (BB/variación < 1%)"
         print(mensaje)
         enviar_telegram(mensaje)
         return
@@ -86,21 +86,25 @@ def analizar(symbol):
     a = df.iloc[-2]
     estrategias = []
 
+    # 1. Cruce EMA
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
+    # 2. Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
 
+    # 3. RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
         estrategias.append("RSI + MACD CALL")
     if a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["rsi"] < 50:
         estrategias.append("RSI + MACD PUT")
 
+    # 4. ADX + EMA
     if u["adx"] > 20:
         if u["+di"] > u["-di"] and u["ema9"] > u["ema20"]:
             estrategias.append("ADX + EMA CALL")
@@ -113,8 +117,13 @@ def analizar(symbol):
         expiracion = "5 min" if fuerza >= 3 else "3 min"
         fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
         estrellas = "⭐" * fuerza
-        mensaje = f"📊 Señal {tipo} en {symbol}:
-{fecha}\n" + "\n".join(estrategias) + f"\n⏱️ Expiración sugerida: {expiracion}\n📈 Confianza: {estrellas}"
+        mensaje = (
+            f"📊 Señal {tipo} en {symbol}:\n"
+            f"{fecha}\n"
+            + "\n".join(estrategias) +
+            f"\n⏱️ Expiración sugerida: {expiracion}\n"
+            f"📈 Confianza: {estrellas}"
+        )
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"], expiracion)
         ULTIMAS_SENIALES[symbol] = ahora
@@ -130,11 +139,12 @@ def iniciar():
         print("🕒 Esperando 2 minutos...\n")
         time.sleep(120)
 
+# Flask para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con filtros de consolidación, puntaje de confianza y mínimo 2 estrategias"
+    return "✅ Bot activo con consolidación, mínimo 2 estrategias, puntaje de confianza y expiración sugerida"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
