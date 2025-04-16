@@ -1,8 +1,10 @@
+
 import requests, pandas as pd, ta, time, csv
 from datetime import datetime
 from flask import Flask
 from threading import Thread
 
+# CONFIGURACIÓN
 API_KEY = "8e0049007fcf4a21aa59a904ea8af292"
 INTERVAL = "5min"
 TELEGRAM_TOKEN = "7099030025:AAE7LsZWHPRtUejJGcae0pDzonHwbDTL-no"
@@ -50,6 +52,9 @@ def analizar(symbol):
         df["bb_upper"] = bb.bollinger_hband()
         df["bb_lower"] = bb.bollinger_lband()
     except:
+        return
+
+    if "bb_upper" not in df.columns or "bb_lower" not in df.columns:
         return
 
     u = df.iloc[-1]
@@ -103,10 +108,15 @@ def analizar(symbol):
         fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
         estrellas = "⭐" * fuerza
         mensaje = (
-            f"📊 Señal {tipo} en {symbol}:\n"
-            f"{fecha}\n"
-            + "\n".join(estrategias) +
-            f"\n⏱️ Expiración sugerida: {expiracion}\n"
+            f"📊 Señal {tipo} en {symbol}:
+"
+            f"{fecha}
+" +
+            "
+".join(estrategias) +
+            f"
+⏱️ Expiración sugerida: {expiracion}
+"
             f"📈 Confianza: {estrellas}"
         )
         enviar_telegram(mensaje)
@@ -118,21 +128,19 @@ def analizar(symbol):
 
 def iniciar():
     while True:
-        print("\n⏳ Analizando todos los pares...\n")
+        print("⏳ Analizando todos los pares...")
         for par in PARES:
             analizar(par)
-        print("🕒 Esperando 2 minutos...\n")
+        print("🕒 Esperando 2 minutos...
+")
         time.sleep(120)
 
-# Flask app para Render
+# Flask para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
     return "✅ Bot activo con estrategias: EMA, EMA+RSI, MACD+RSI, ADX+EMA y filtros avanzados"
 
-# Corre análisis en segundo plano
 Thread(target=iniciar).start()
-
-# Corre Flask (visible en la web)
-app.run(host='0.0.0.0', port=8080)
+Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
