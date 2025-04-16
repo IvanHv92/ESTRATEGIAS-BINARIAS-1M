@@ -49,13 +49,13 @@ def analizar(symbol):
     u = df.iloc[-1]
     a = df.iloc[-2]
 
-    # 🚫 Filtro por volatilidad
     rango = abs(u["high"] - u["low"]) / u["close"]
     if rango > 0.02:
-        print(f"⚠️ Volatilidad alta ignorada en {symbol}")
+        mensaje = f"⚠️ Señal ignorada en {symbol} por volatilidad inestable (rango > 2%)"
+        print(mensaje)
+        enviar_telegram(mensaje)
         return
 
-    # 🚫 Filtro anti-martingala (última señal hace < 5 min)
     ahora = datetime.now()
     if symbol in ULTIMAS_SENIALES:
         delta = (ahora - ULTIMAS_SENIALES[symbol]).total_seconds()
@@ -80,51 +80,39 @@ def analizar(symbol):
     a = df.iloc[-2]
     estrategias = []
 
-    # 1. Cruce EMA
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"]:
         estrategias.append("Cruce EMA CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"]:
         estrategias.append("Cruce EMA PUT")
 
-    # 2. Cruce EMA + RSI
     if a["ema9"] < a["ema20"] and u["ema9"] > u["ema20"] and u["rsi"] > 50:
         estrategias.append("Cruce EMA + RSI CALL")
     if a["ema9"] > a["ema20"] and u["ema9"] < u["ema20"] and u["rsi"] < 50:
         estrategias.append("Cruce EMA + RSI PUT")
 
-    # 3. RSI + MACD
     if a["macd"] < a["macd_signal"] and u["macd"] > u["macd_signal"] and u["rsi"] > 50:
         estrategias.append("RSI + MACD CALL")
     if a["macd"] > a["macd_signal"] and u["macd"] < u["macd_signal"] and u["rsi"] < 50:
         estrategias.append("RSI + MACD PUT")
 
-    # 4. ADX + EMA
     if u["adx"] > 20:
         if u["+di"] > u["-di"] and u["ema9"] > u["ema20"]:
             estrategias.append("ADX + EMA CALL")
         if u["-di"] > u["+di"] and u["ema9"] < u["ema20"]:
             estrategias.append("ADX + EMA PUT")
 
-    if estrategias:
+    if len(estrategias) >= 2:
         tipo = "CALL" if "CALL" in " ".join(estrategias) else "PUT"
-        fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
         fuerza = len(estrategias)
-
-        # ⏳ Recomendación de expiración
-        if fuerza >= 3:
-            expiracion = "5 min"
-        elif fuerza == 2:
-            expiracion = "3 min"
-        else:
-            expiracion = "2 min"
-
-        mensaje = f"📊 Señal {tipo} en {symbol}:\n" + "\n".join(estrategias) + f"\n⏱️ Expiración sugerida: {expiracion}"
+        expiracion = "5 min" if fuerza >= 3 else "3 min"
+        fecha = ahora.strftime("%Y-%m-%d %H:%M:%S")
+        mensaje = f"📊 Señal {tipo} en {symbol}:\n{fecha}\n" + "\n".join(estrategias) + f"\n⏱️ Expiración sugerida: {expiracion}"
         enviar_telegram(mensaje)
         guardar_csv(fecha, symbol, tipo, ", ".join(estrategias), u["close"], expiracion)
         ULTIMAS_SENIALES[symbol] = ahora
         print(mensaje)
     else:
-        print(f"[{symbol}] ❌ Sin señal clara")
+        print(f"[{symbol}] ❌ Señal débil (menos de 2 estrategias)")
 
 def iniciar():
     while True:
@@ -134,12 +122,11 @@ def iniciar():
         print("🕒 Esperando 2 minutos...\n")
         time.sleep(120)
 
-# Flask para mantener activo en Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "✅ Bot activo con 4 estrategias + expiración, filtro de volatilidad y anti-martingala"
+    return "✅ Bot activo con señales estrictas, filtros de volatilidad y reporte por Telegram"
 
 Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
 iniciar()
