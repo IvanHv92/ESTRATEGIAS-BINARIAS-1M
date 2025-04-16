@@ -116,5 +116,6 @@ app = Flask('')
 def home():
     return "✅ Bot activo con estrategias: EMA, EMA+RSI, RSI+MACD, ADX+EMA (cada 2 min)"
 
-Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
-iniciar()
+# Ejecutar análisis en segundo plano y Flask en el hilo principal
+Thread(target=iniciar).start()
+app.run(host='0.0.0.0', port=8080)
